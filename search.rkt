@@ -38,7 +38,7 @@
 
           (define (probe frnt acc)
             (if (empty? frnt)
-                (output ('(empty) '() '(empty)))
+                empty
                 (let ([path   (first frnt)])
                   (if (goal? (first path))
                       (output acc path (rest frnt))
@@ -212,5 +212,6 @@
 (provide prune-nothing prune-cycles prune-extension-joins prune-frontier-joins)
 (provide search main)
 
+(search B (λ (x) (equal? (node-id x) "S")) bfs< prune-nothing)
 
 
