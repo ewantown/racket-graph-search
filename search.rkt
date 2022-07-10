@@ -212,6 +212,5 @@
 (provide prune-nothing prune-cycles prune-extension-joins prune-frontier-joins)
 (provide search main)
 
-(search B (λ (x) (equal? (node-id x) "S")) bfs< prune-nothing)
 
 
