@@ -24,8 +24,8 @@
 ;; path<  : (node node) -> boolean
 ;; pruner : (list (list node)) (list (list node)) -> (list (list node))
 ;; -----> : (list (list (list node)) (list node) (list (list node)))
-;; Interp : (first  ret) := list of path expansions in "rewind" order (pi...p0)
-;;        : (second ret) := path found, in rewind order (ni...n0)
+;; Interp : (first  ret) := list of path expansions, in order expanded
+;;        : (second ret) := path found
 ;;        : (third  ret) := paths to unvisited frontier nodes, ordered by path<
 (define (search start goal? path< pruner)
   (local [(define init-frnt (list (list start)))
