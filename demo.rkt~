@@ -1,5 +1,8 @@
 #lang racket
+
 (require "search.rkt")
+
+(provide h< tie< dfbb)
 
 ;; ==========================================================================
 ;; Sample data:
@@ -50,7 +53,7 @@
 (define cost< (cost::< cost tie<))
 
 ;; Simple heuristic (data dependent)
-(define (h< p) (if (empty? p) -inf.0 (node-data (first p)))) 
+(define (h< p) (if (empty? p) +inf.0 (node-data (first p)))) 
 
 ;; A*: queue prioritized by cost+heuristic weighting, preference-finalized
 (define a*< (a*::< cost h< tie<))
@@ -63,59 +66,40 @@
 (define DFS   (search S target? dfs< pruning))
 (define BFS   (search S target? bfs< pruning))
 (define COST< (search S target? cost< pruning))
-(define A*    (search S target? a*< pruning))
 
-(define dfbb (bnb::search dfs< h<))
-(define B&B   (dfbb S cost target?))
+(define A*   (search S target? a*< pruning))
+(define dfbb (search::iter dfs< (cost::rec cost)))
+(define B&B  (dfbb S cost target?))
 
-;; For display
+;; ==========================================================================
+;; Sample output:
+
+(define show-part-costs #t)
 (define path-cost (cost::rec cost))
-
-(define (represent results)
-  (if (empty? results)
-      empty
-      (let ([rep-acc (foldr (lambda (lon nxt)
-                              (cons (map (lambda (n) (node-id n)) lon)
-                                    nxt))
-                            empty
-                            (first results))]
-            [rep-path  (cons (map (lambda (nd) (node-id nd))
-                                  (second results))
-                             (path-cost (reverse (second results))))]
-            
-            [rep-frnt (foldr (lambda (lon nxt)
-                               (cons (map (lambda (n) (node-id n)) lon)
-                                     nxt))
-                             empty
-                             (third results))])
-
-    (display "Probed: \n")
-    (pretty-print rep-acc)
-    (display "Found: \n")
-    (pretty-print rep-path)
-    (display "Unexpanded: \n")
-    (pretty-print rep-frnt))))
 
 (define (main)
   
   (display "DFS\n")
-  (represent DFS)
+  (represent DFS path-cost show-part-costs)
   (display "\n")
   
   (display "BFS\n")
-  (represent BFS)
+  (represent BFS path-cost show-part-costs)
   (display "\n")
   
   (display "COST<\n")
-  (represent COST<)
+  (represent COST< path-cost show-part-costs)
   (display "\n")
   
   (display "A*\n")
-  (represent A*)
+  (represent A* path-cost show-part-costs)
   (display "\n")
 
   (display "B&B\n")
-  (represent B&B)
+  (represent B&B path-cost show-part-costs)
   (display "\n"))
+
+
+
 
 
