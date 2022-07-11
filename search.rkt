@@ -1,5 +1,13 @@
 #lang racket
 
+;; ===========================================================================
+;; Module interface:
+
+(provide (struct-out node))
+(provide prune-nothing prune-cycles prune-extension-joins prune-frontier-joins)
+(provide tie::< dfs::< bfs::< cost::< a*::<)
+(provide cost::rec search bnb::search)
+
 ;; ==========================================================================
 ;; Basic struct def for directed graph node:
 
@@ -8,8 +16,8 @@
 (struct node (id data arcs)
   #:methods
   gen:equal+hash
-  ;; Simple hashing scheme (id hashcodes)
-  ;; presupposes no duplicate node ids 
+  ;; Simple hashing scheme, presupposes
+  ;; unique identifiers for nodes
   [(define (equal-proc a b recur)
      (and (equal? (node-id a)   (node-id b))
           (equal? (node-data a) (node-data b))))
@@ -17,7 +25,7 @@
    (define (hash2-proc a recur) (equal-secondary-hash-code (node-id a)))])
 
 ;; ==========================================================================
-;; Main search mechanism:
+;; Core search mechanism:
 
 ;; start  : node
 ;; goal?  : node -> boolean
@@ -55,6 +63,130 @@
     (probe init-frnt init-acc)))
 
 ;; ==========================================================================
+;; Factory for path cost functions
+
+;; lon   : (list node); s.t.: (first lon) is current, (last lon) is initial
+;; costfn: (cons node node) -> number; s.t. edge-pair is (cons tail head)
+;; ----->: (list node) -> number; s.t. computes cost(path-to-curr) recursively 
+(define (cost::rec costfn)
+  (lambda (lon)
+    (local [(define route (reverse lon)) 
+            (define (recsum p)
+              ;; error conditions caught with +/- infinite costs
+              ;; use messages for reversal / termination debug
+              (cond [(empty? p) -inf.0]
+                    ;(error "cost of empty path")]
+                    [(empty? (rest p)) 0] ; singleton
+                    [(null? (costfn (cons (first p) (second p)))) +inf.0]
+                    ;(error "no such edge: "(map (lambda (n) (node-id n)) p))]
+                    [else (+ (costfn (cons (first p) (second p)))
+                             (recsum (rest p)))]))]
+      (recsum route))))
+
+;; ==========================================================================
+;; Factories for priority functions
+
+;; Tie-breaker factory (breakers are by node id)
+;; Defaults to:
+;; - false for type-clash
+;; - defer to built-in ordering if node ids are primitives
+;; Specifiable behaviour is for lists as ids
+(define (tie::< list-data-rel)
+  (lambda (p1 p2)
+    (let ([i1 (node-id (first p1))]
+          [i2 (node-id (first p2))])
+      (cond [(and (number? i1) (number? i2)) (< i1 i2)]
+            [(and (symbol? i1) (symbol? i2)) (symbol<? i1 i2)]
+            [(and (string? i1) (string? i2)) (string<? i1 i2)]
+            [(and (symbol? i1) (string? i2)) (symbol<? i1 (string->symbol i2))]
+            [(and (string? i1) (symbol? i2)) (symbol<? (string->symbol i1) i2)]
+            [(and (list? i1)   (list? i2))   (list-data-rel i1 i2)]
+            [else false]))))
+            ;[else (display "prefer: incomparable identifiers ")]))) 
+
+;; DFS relation factory
+(define (dfs::< tie/<)
+  (lambda (p nxt) (or (> (length p) (length nxt))     
+                      (and (= (length p) (length nxt))
+                           (tie/< p nxt)))))
+
+;; BFS relation factory
+(define (bfs::< tie/<)
+  (lambda (p nxt) (or (< (length p) (length nxt))     
+                      (and (= (length p) (length nxt))
+                           (tie/< p nxt)))))
+  
+;; Cost relation factory
+(define (cost::< costfn tie/<)
+  (let ([cost/rec (cost::rec costfn)]) 
+    (lambda (p nxt) (or (< (cost/rec p) (cost/rec nxt))
+                        (and (= (cost/rec p) (cost/rec nxt))
+                             (tie/< p nxt))))))
+
+;; A* relation factory
+(define (a*::< costfn h/< tie/<)
+  (lambda (p nxt)
+    (local [(define (weight path) (+ ((cost::rec costfn) path) (h/< path)))]
+      (or (< (weight p) (weight nxt))
+          (and (= (weight p) (weight nxt))
+               (tie/< p nxt))))))
+
+;; ==========================================================================
+;; Branch and Bound Factory
+
+(define (bnb::search xfs/< h/<)
+  (lambda (start costfn goal?)
+    (local [(define cost/rec (cost::rec costfn))
+            (define init-probe (search start goal? xfs/< prune-cycles))
+            (define init-rsf (if (empty? init-probe)
+                                 empty
+                                 (reverse (second init-probe))))]     
+      (if (empty? init-rsf) ; (failed search?)
+          empty
+          (local [(define (output acc rsf frnt)
+                    (list (reverse (map (lambda (p) (reverse p)) acc))
+                          (reverse rsf)
+                          (map (lambda (p) (reverse p)) frnt)))
+                                
+                  (define init-frnt (map reverse (third init-probe)))
+                  (define init-acc (map reverse (reverse (first init-probe))))
+                  (define init-bnd (cost/rec init-rsf))
+
+                  (define (weight p) (+ (cost/rec p) (h/< p)))
+                  (define (prune frnt exts bnd)
+                  (append (filter (lambda (p) (< (weight p) bnd))
+                                  exts)
+                          frnt))
+
+                (define (it-probe frnt acc rsf bnd)
+                  (if (empty? frnt)
+                      (output acc rsf empty)
+                      (let ([path (first frnt)])
+                        (if (not (goal? (first path)))
+                            (local [(define extens
+                                      (map (lambda (n) (cons n path))
+                                           (node-arcs (first path))))
+                                    (define fringe (prune frnt extens bnd))
+                                    (define reduct
+                                      (filter (lambda (p)
+                                                (not (equal? p path)))
+                                              fringe))]
+                              (it-probe (sort reduct xfs/<)
+                                        (cons path acc)
+                                        rsf
+                                        bnd))
+                            (local [(define nxtbnd (min (weight path) bnd))
+                                    (define nxtrsf (if (= nxtbnd bnd)
+                                                       rsf
+                                                       path))
+                                    (define nxtacc (if (= nxtbnd bnd)
+                                                       (cons path acc)
+                                                       (cons rsf  acc)))]
+                              (it-probe (rest frnt) nxtacc nxtrsf nxtbnd))))))]
+            (it-probe init-frnt init-acc init-rsf init-bnd))))))
+
+
+;; ==========================================================================
 ;; Pruning functions (self-explanatory?)
 
 (define (prune-nothing frnt exts) (append exts frnt))
@@ -79,138 +211,7 @@
                   exts)
           frnt))
 
-;; ==========================================================================
-;; Priority functions
 
-;; Simple tie-breaker
-(define (pref p1 p2) (string<? (node-id (first p1)) (node-id (first p2))))
-
-;; Simple heuristic
-(define (est n) (node-data n)) 
-(define (h< n1 n2) (< (est n1) (est n2))) 
-(define (h= n1 n2) (= (est n1) (est n2)))
-
-;; DFS order: prioritized stack
-(define dfs< (lambda (p nxt) (or (> (length p) (length nxt))     
-                                 (and (= (length p) (length nxt))
-                                      (pref p nxt)))))
-
-;; BFS order: prioritized queue
-(define bfs< (lambda (p nxt) (or (< (length p) (length nxt))     
-                                 (and (= (length p) (length nxt))
-                                      (pref p nxt)))))
-
-;; Least-cost-first: queue prioritized by path-cost
-(define cost< (lambda (p nxt) (or (< (path-cost p) (path-cost nxt))
-                                  (and (= (path-cost p) (path-cost nxt))
-                                       (pref p nxt)))))
-
-;; A*: queue prioritized by combined heuristic/cost weighting
-(define a*< (lambda (p nxt)
-  (local [(define (weight path) (+ (path-cost path) (est (first path))))]
-    (or (< (weight p) (weight nxt))
-        (and (= (weight p) (weight nxt))
-             (pref p nxt))))))
-                                 
-
-;; ==========================================================================
-;; Sample data:
-
-(define Z (node "Z" 0.0  '()))
-(define G (node "G" 4.0  (list Z)))
-(define H (node "H" 6.0  (list Z)))
-(define F (node "F" 12.0 (list G H Z)))
-(define D (node "D" 9.0  (list F)))
-(define E (node "E" 11.0 (list F)))
-(define C (node "C" 19.0 (list D E F)))
-(define A (node "A" 21.0 (list C)))
-(define B (node "B" 19.0 (list C)))
-(define S (node "S" 24.0 (list A B C)))
-
-(define (cost edge)
-  (cond [(or (equal? edge (cons S B)) (equal? edge (cons G Z))) 9.0]
-        [(or (equal? edge (cons C F)) (equal? edge (cons F G))) 8.0]
-        [(or (equal? edge (cons E F)) (equal? edge (cons F H))) 7.0]
-        [(or (equal? edge (cons C D)) (equal? edge (cons D F))) 5.0]
-        [(or (equal? edge (cons S C)) (equal? edge (cons C E))) 4.0]
-        [(equal? edge (cons F Z)) 18.0]
-        [(equal? edge (cons B C)) 13.0]
-        [(equal? edge (cons H Z)) 6.0] 
-        [(equal? edge (cons S A)) 3.0]
-        [(equal? edge (cons A C)) 2.0]
-        [else null]))
-
-(define (path-cost lon)
-  (local [(define route (reverse lon))
-           (define (recsum p)
-             (cond [(empty? p) (error "cost of empty path")]
-                   [(empty? (rest p)) 0] ; singleton
-                   [(null? (cost (cons (first p) (second p))))
-                    (error "no such edge: "(map (lambda (n) (node-id n)) p))]
-                   [else (+ (cost (cons (first p) (second p)))
-                            (recsum (rest p)))]))]
-    (recsum route)))
-
-;; ==========================================================================
-;; Sample output parameters
-
-(define target? (lambda (nd) (equal? (node-id nd) "Z")))
-
-(define (represent results)
-  (let ([rep-acc (foldr (lambda (lon nxt)
-                          (cons (map (lambda (n) (node-id n)) lon)
-                                nxt))
-                        empty
-                        (first results))]
-        [rep-path  (cons (map (lambda (nd) (node-id nd))
-                              (second results))
-                         (path-cost (reverse (second results))))]
-                  
-        [rep-frnt (foldr (lambda (lon nxt)
-                          (cons (map (lambda (n) (node-id n)) lon)
-                                nxt))
-                        empty
-                        (third results))])
-
-    (display "Probed: \n")
-    (pretty-print rep-acc)
-    (display "Found: \n")
-    (pretty-print rep-path)
-    (display "Unexpanded: \n")
-    (pretty-print rep-frnt)))
-
-
-(define pruning prune-nothing)
-
-(define DFS (search S target? dfs< pruning))
-(define BFS (search S target? bfs< pruning))
-(define COST< (search S target? cost< pruning))
-(define A* (search S target? a*< pruning))
-
-(define (main)
-  
-  (display "DFS\n")
-  (represent DFS)
-  (display "\n")
-  
-  (display "BFS\n")
-  (represent BFS)
-  (display "\n")
-  
-  (display "COST<\n")
-  (represent COST<)
-  (display "\n")
-  
-  (display "A*\n")
-  (represent A*)
-  (display "\n"))
-
-
-;; ===========================================================================
-;; Module interface:
-(provide (struct-out node))
-(provide prune-nothing prune-cycles prune-extension-joins prune-frontier-joins)
-(provide search main)
 
 
 
