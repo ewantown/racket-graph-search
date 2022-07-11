@@ -24,8 +24,7 @@
   ;;  ii) let id := `(,arcs) - i.e. arc-list as symbol
   ;; iii) let id := `(,(cons data arcs)) - i.e. (data . arc) link as symbol
   [(define (equal-proc a b recur)
-     (and (equal? (node-id a)   (node-id b))
-          (equal? (node-data a) (node-data b))))
+     (equal? (node-id a)   (node-id b)))
    (define (hash-proc a recur) (equal-hash-code (node-id a)))
    (define (hash2-proc a recur) (equal-secondary-hash-code (node-id a)))])
 
@@ -144,8 +143,7 @@
 ;; algo finds soln that minimizes (weight soln))
 (define (search::iter xfs/< solnweight)
   (lambda (start costfn goal?)
-    (local [;(define cost/rec (cost::rec costfn))
-            (define init-probe (search start goal? xfs/< prune-cycles))
+    (local [(define init-probe (search start goal? xfs/< prune-cycles))
             (define init-rsf (if (empty? init-probe)
                                  empty
                                  (reverse (second init-probe))))]     
@@ -160,7 +158,6 @@
                   (define init-acc (map reverse (reverse (first init-probe))))
                   (define init-bnd (solnweight init-rsf))
 
-                  ;(define (weight p) (cost/rec p));(+ (cost/rec p) (h/< p)))
                   (define (prune frnt exts bnd)
                     (append (filter (lambda (p) (< (solnweight p) bnd))
                                     exts)
