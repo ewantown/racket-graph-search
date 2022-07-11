@@ -128,13 +128,12 @@
                              (tie/< p nxt))))))
 
 ;; A* relation factory
-(define (a*::< costfn h/< tie/<) ;; under improvement
+(define (a*::< costfn h/< tie/<) 
   (lambda (p nxt)
     (local [(define (weight path) (+ ((cost::rec costfn) path) (h/< path)))]
       (or (< (weight p) (weight nxt))
           (and (= (weight p) (weight nxt))
                (tie/< p nxt))))))
-          ;((bfs::< tie/<) p nxt))))) ;?????
 
 ;; ==========================================================================
 ;; Iterative Bounded Search Factory
