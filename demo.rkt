@@ -2,7 +2,7 @@
 
 (require "search.rkt")
 
-(provide h< tie< dfbb)
+(provide h tie<)
 
 ;; ==========================================================================
 ;; Sample data:
@@ -41,43 +41,60 @@
 ;; Sample parameter specs
 
 ;; Simple tie-breaker
+;; Notes: Client can only (& must) specify case for nodes w/ lists as ids.
+;; In other standard cases ties are broken by comparing primitives.
+;; In non-standard and type-clash cases, always evals to false.
 (define tie< (tie::< (lambda (l1 l2) (< (length l1) (length l2)))))
 
-;; DFS order: preference-finalized stack (LIFO)
+;; DFS order: tie-prioritized stack
 (define dfs< (dfs::< tie<))
 
-;; BFS order: preference-finalized queue (FIFO)
+;; BFS order: tie-prioritized queue
 (define bfs< (bfs::< tie<))
 
-;; Least-cost-first: queue prioritized by path-cost, preference-finalized 
+;; Sums cost of edges over list of nodes (LON)
+;; Notes: Cost function is provided by client.
+;; The defined procedure is such that:
+;; = +inf.0 if LON is empty
+;; =      0 if LON is singleton
+;; = -inf.0 if (cost ((car LON) . (car (cdr LON)))) is null (aka empty)
+(define path-cost (cost::recur cost))
+
+;; Least-cost-first: Cost-prioritized queue (w/ order finalized by tie-breaker)
 (define cost< (cost::< cost tie<))
 
-;; Simple heuristic (data dependent)
-(define (h< p) (if (empty? p) +inf.0 (node-data (first p)))) 
+;; Simple heuristic (w/ data-dependent admissability)
 
-;; A*: queue prioritized by cost+heuristic weighting, preference-finalized
-(define a*< (a*::< cost h< tie<))
+(define h node-data)
 
-;; Search specs
+(define h< (h::< h tie<))
+
+;; A*: Queue prioritized by path-cost + heuristic weighting (tie-breaker final)
+(define a*< (a*::< h path-cost tie<))
+
+;; Demo search specs
 (define target? (lambda (nd) (equal? (node-id nd) 'Z)))
-(define pruning prune-nothing)
+(define pruner prune-nothing)
+                                       
+(define FAIL ((search::terminal  dfs<     pruner) A (lambda (n) (equal? n S))))
+(define DFS  ((search::terminal  dfs<     pruner) S target?))
+(define BFS  ((search::terminal  bfs<     pruner) S target?))
+(define LCF  ((search::terminal  cost<    pruner) S target?))
+(define A*   ((search::terminal  a*<      pruner) S target?))
+(define DFBB ((search::iterative dfs<  path-cost) S target?))
 
-;; Sample search results
-(define DFS   (search S target? dfs< pruning))
-(define BFS   (search S target? bfs< pruning))
-(define LCF (search S target? cost< pruning))
 
-(define A*   (search S target? a*< pruning))
-(define dfbb (search::iter dfs< (cost::rec cost)))
-(define DFBB  (dfbb S cost target?))
 
 ;; ==========================================================================
 ;; Sample output:
 
-(define show-part-costs #t)
-(define path-cost (cost::rec cost))
+(define show-part-costs #f)
 
 (define (main)
+
+  (display "FAIL\n")
+  (represent FAIL path-cost show-part-costs)
+  (display "\n")
   
   (display "DFS\n")
   (represent DFS path-cost show-part-costs)
@@ -98,6 +115,7 @@
   (display "DFBB\n")
   (represent DFBB path-cost show-part-costs)
   (display "\n"))
+
 
 
 

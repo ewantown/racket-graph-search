@@ -5,8 +5,8 @@
 
 (provide (struct-out node))
 (provide prune-nothing prune-cycles prune-extension-joins prune-frontier-joins)
-(provide tie::< dfs::< bfs::< cost::< a*::<)
-(provide cost::rec search search::iter)
+(provide tie::< dfs::< bfs::< cost::< h::< a*::<)
+(provide cost::recur search::terminal search::iterative)
 (provide represent)
 
 ;; ==========================================================================
@@ -24,12 +24,18 @@
   ;;  ii) let id := `(,arcs) - i.e. arc-list as symbol
   ;; iii) let id := `(,(cons data arcs)) - i.e. (data . arc) link as symbol
   [(define (equal-proc a b recur)
-     (equal? (node-id a)   (node-id b)))
+     (equal? (node-id a) (node-id b)))
    (define (hash-proc a recur) (equal-hash-code (node-id a)))
    (define (hash2-proc a recur) (equal-secondary-hash-code (node-id a)))])
 
 ;; ==========================================================================
-;; Core search mechanism:
+;; Core search mechanism
+
+;; Formats output as "snapshot" of termination state
+(define (output acc res frnt)
+  (list (reverse (map (lambda (p) (reverse p)) acc))
+        (reverse res)
+        (map (lambda (p) (reverse p)) frnt)))
 
 ;; start  : node
 ;; goal?  : node -> boolean
@@ -39,45 +45,41 @@
 ;; Interp : (first  ret) := list of path expansions, in order expanded
 ;;        : (second ret) := path found
 ;;        : (third  ret) := paths to unvisited frontier nodes, ordered by path<
-(define (search start goal? path< prune)
-  (local [(define init-frnt (list (list start)))
-          (define init-acc  empty)
-                  
-          (define (output acc res frnt)
-            (list (reverse (map (lambda (p) (reverse p)) acc))
-                  (reverse res)
-                  (map (lambda (p) (reverse p)) frnt)))
+(define (search::terminal path< prune)
+  (lambda (start goal?)
+    (local [(define init-frnt (list (list start)))
+            (define init-acc  empty)
+            
+            (define (probe frnt acc)
+              (if (empty? frnt)
+                  (output acc empty empty)
+                  (let ([path   (first frnt)])
+                    (if (goal? (first path))
+                        (output acc path (rest frnt))
+                        (local [(define extens;ions of this path
+                                  (map (lambda (n) (cons n path)) 
+                                       (node-arcs (first path))))
+                                (define fringe (prune frnt extens))
+                                (define reduct;ion of the recurrence
+                                  (filter (lambda (p) (not (equal? p path)))
+                                          fringe))]
 
-          (define (probe frnt acc)
-            (if (empty? frnt)
-                empty
-                (let ([path   (first frnt)])
-                  (if (goal? (first path))
-                      (output acc path (rest frnt))
-                      (local [(define extens;ions of this path with discoverds
-                                (map (lambda (n) (cons n path)) 
-                                     (node-arcs (first path))))
-                              (define fringe (prune frnt extens))
-                              (define reduct;ion of the recurrence
-                                (filter (lambda (p) (not (equal? p path)))
-                                        fringe))]
-
-                        (probe (sort reduct path<) (cons path acc)))))))]
-    
-    (probe init-frnt init-acc)))
+                          (probe (sort reduct path<) (cons path acc)))))))]
+      
+      (probe init-frnt init-acc))))
 
 ;; ==========================================================================
 ;; Factory for path cost functions
 
 ;; lon   : (list node); s.t.: (first lon) is current, (last lon) is initial
 ;; costfn: (cons node node) -> number; s.t. edge-pair is (cons tail head)
-;; ----->: (list node) -> number; s.t. computes cost(path-to-curr) recursively 
-(define (cost::rec costfn)
+;; ----->: (list node) -> number; s.t. computes cost(path-to-curr) recursively
+(define (cost::recur costfn)
   (lambda (lon)
     (local [(define route (reverse lon)) 
             (define (recsum p)
               ;; error conditions caught with +/- infinite costs
-              ;; use messages for reversal / termination debug
+              ;; messages for data reversal / termination debug
               (cond [(empty? p) -inf.0]
                     ;(error "cost of empty path")]
                     [(empty? (rest p)) 0] ; singleton
@@ -94,19 +96,34 @@
 ;; Defaults to:
 ;; - false for type-clash
 ;; - defer to built-in ordering if node ids are primitives
+;; - recursively deepen comparison for (partial) ties
 ;; Specifiable behaviour is for lists as ids
 (define (tie::< list-data-rel)
   (lambda (p1 p2)
-    (let ([i1 (node-id (first p1))]
-          [i2 (node-id (first p2))])
-      (cond [(and (number? i1) (number? i2)) (< i1 i2)]
-            [(and (symbol? i1) (symbol? i2)) (symbol<? i1 i2)]
-            [(and (string? i1) (string? i2)) (string<? i1 i2)]
-            [(and (symbol? i1) (string? i2)) (symbol<? i1 (string->symbol i2))]
-            [(and (string? i1) (symbol? i2)) (symbol<? (string->symbol i1) i2)]
-            [(and (list? i1)   (list? i2))   (list-data-rel i1 i2)]
-            [else false]))))
-            ;[else (display "prefer: incomparable identifiers ")]))) 
+    (cond [(empty? p1) (not (empty? p2))]
+          [(empty? p2) false]
+          [else (let ([i1 (node-id (first p1))]
+                      [i2 (node-id (first p2))])
+                  (cond 
+                    [(and (number? i1) (number? i2))
+                     (or (< i1 i2)
+                         (and (= i1 i2)
+                              ((tie::< list-data-rel) (rest p1) (rest p2))))]
+                    [(and (symbol? i1) (symbol? i2))
+                     (or (symbol<? i1 i2)
+                         (and (equal? i1 i2)
+                              ((tie::< list-data-rel) (rest p1) (rest p2))))]
+                    [(and (string? i1) (string? i2))
+                     (or (string<? i1 i2)
+                         (and (equal? i1 i2)
+                              ((tie::< list-data-rel) (rest p1) (rest p2))))]
+                    [(and (pair? i1) (pair? i2))
+                     (or  ((tie::< list-data-rel) (list (car i1))
+                                                  (list (car i2)))
+                          ((tie::< list-data-rel) (list (cdr i1))
+                                                  (list (cdr i2))))]
+                    [(and (list? i1) (list? i2)) (list-data-rel i1 i2)]
+                    [else false]))])))
 
 ;; DFS relation factory
 (define (dfs::< tie/<)
@@ -122,38 +139,47 @@
   
 ;; Cost relation factory
 (define (cost::< costfn tie/<)
-  (let ([cost/rec (cost::rec costfn)]) 
+  (let ([cost/rec (cost::recur costfn)]) 
     (lambda (p nxt) (or (< (cost/rec p) (cost/rec nxt))
                         (and (= (cost/rec p) (cost/rec nxt))
                              (tie/< p nxt))))))
 
-;; A* relation factory
-(define (a*::< costfn h/< tie/<) 
+;; Heuristic relation factory
+(define (h::< h tie/<)
   (lambda (p nxt)
-    (local [(define (weight path) (+ ((cost::rec costfn) path) (h/< path)))]
+      (or (< (h p) (h nxt))
+          (and (= (h p) (h nxt))
+               (tie/< p nxt)))))
+
+;; A* relation factory
+(define (a*::< h cost/rec tie/<) 
+  (lambda (p nxt)
+    (local [(define (weight p) (+ (h (first p)) (cost/rec p)))]
+;              (cond [(empty? p) +inf.0]
+;                    [(empty? (rest p)) (h (first p))]
+;                    [else (+ (h (first p)) (cost/rec p))]))]
       (or (< (weight p) (weight nxt))
           (and (= (weight p) (weight nxt))
                (tie/< p nxt))))))
 
+                                    
+                                    
 ;; ==========================================================================
 ;; Iterative Bounded Search Factory
 
-;; weight: (list node) -> number
-;; algo finds soln that minimizes (weight soln))
-(define (search::iter xfs/< solnweight)
-  (lambda (start costfn goal?)
-    (local [(define init-probe (search start goal? xfs/< prune-cycles))
-            (define init-rsf (if (empty? init-probe)
-                                 empty
-                                 (reverse (second init-probe))))]     
+;; xfs/<     : ((list node) (list node)) -> boolean
+;; solnweight: (list node) -> number
+;; --------->: (node (node -> boolean)) -> (typeof output)
+(define (search::iterative xfs/< solnweight)
+  (lambda (start goal?)
+    (local [(define init-probe
+              ((search::terminal xfs/< prune-cycles) start goal?))
+            (define init-rsf (reverse (second init-probe)))]     
       (if (empty? init-rsf) ; (failed search?)
-          empty
-          (local [(define (output acc rsf frnt)
-                    (list (reverse (map (lambda (p) (reverse p)) acc))
-                          (reverse rsf)
-                          (map (lambda (p) (reverse p)) frnt)))
-                                
-                  (define init-frnt (map reverse (third init-probe)))
+          (output (reverse (map (lambda (p) (reverse p)) (first init-probe)))
+                  empty
+                  empty)
+          (local [(define init-frnt (map reverse (third init-probe)))
                   (define init-acc (map reverse (reverse (first init-probe))))
                   (define init-bnd (solnweight init-rsf))
 
@@ -222,41 +248,43 @@
 ;; Display format (for result inspection)
 ;; results  : (cons (list (list node)) (list node) (list (list node)))
 ;; cost/rec : (list node) -> number
-;; flag     : boolean (:= display path costs?)
-(define (represent results cost/rec part-cost-flag)
-  (if (empty? results)
-      empty
-      (let ([rep-acc (foldr (lambda (p nxt)
-                              (cons
-                               (if part-cost-flag
-                                   (cons (map (lambda (n) (node-id n)) p)
-                                         (cost/rec (reverse p)))
-                                   (map (lambda (n) (node-id n)) p))                                     
-                               nxt))
-                            empty
-                            (first results))]
-            [rep-path  (cons (map (lambda (nd) (node-id nd))
-                                  (second results))
-                             (cost/rec (reverse (second results))))]
-            
-            [rep-frnt
-             (foldr (lambda (p nxt)
-                      (cons
-                       (if part-cost-flag
-                           (cons (map (lambda (n) (node-id n)) p)
-                                 (cost/rec (reverse p)))
-                           (map (lambda (n) (node-id n)) p))                                     
-                       nxt))
-                    empty
-                    (third results))])
+;; flag     : boolean (:= display-partial-path-costs?)
 
+(define (represent results cost/rec part-cost-flag)
+  (let ([rep-acc (foldr (lambda (p nxt)
+                          (cons
+                           (if part-cost-flag
+                               (cons (map (lambda (n) (node-id n)) p)
+                                     (cost/rec (reverse p)))
+                                     ;; For f-values instead:
+                                     ;(+ (node-data (last p))
+                                     ;   (cost/rec(reverse p))))
+                                                               
+                               (map (lambda (n) (node-id n)) p))
+                           nxt))
+                        empty
+                        (first results))]
+        [rep-path  (cons (map (lambda (nd) (node-id nd))
+                              (second results))
+                         (cost/rec (reverse (second results))))]
+        [rep-frnt
+         (foldr (lambda (p nxt)
+                  (cons
+                   (if part-cost-flag
+                       (cons (map (lambda (n) (node-id n)) p)
+                             (cost/rec (reverse p)))
+                       (map (lambda (n) (node-id n)) p))                                     
+                   nxt))
+                empty
+                (third results))])
+    
 
     (display "Probed: \n")
     (pretty-print rep-acc)
     (display "Found: \n")
     (pretty-print rep-path)
     (display "Unexpanded: \n")
-    (pretty-print rep-frnt))))
+    (pretty-print rep-frnt)))
 
 
 
