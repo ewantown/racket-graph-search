@@ -43,7 +43,7 @@
 ;; Simple tie-breaker
 ;; Notes: Client can only (& must) specify case for nodes w/ lists as ids.
 ;; In other standard cases ties are broken by comparing primitives.
-;; In non-standard and type-clash cases, always evals to false.
+;; In non-standard and type-clash cases, defined fn always evals to false.
 (define tie< (tie::< (lambda (l1 l2) (< (length l1) (length l2)))))
 
 ;; DFS order: tie-prioritized stack
@@ -67,6 +67,10 @@
 
 (define h node-data)
 
+(define dfsh (lambda (p) (h (first p))))
+
+(define fval (lambda (p) (+ (h (first p)) (path-cost p))))
+
 (define h< (h::< h tie<))
 
 ;; A*: Queue prioritized by path-cost + heuristic weighting (tie-breaker final)
@@ -81,7 +85,8 @@
 (define BFS  ((search::terminal  bfs<     pruner) S target?))
 (define LCF  ((search::terminal  cost<    pruner) S target?))
 (define A*   ((search::terminal  a*<      pruner) S target?))
-(define DFBB ((search::iterative dfs<  path-cost) S target?))
+(define CBDF ((search::iterative dfs<  path-cost) S target?))
+(define HBDF ((search::iterative dfs<       fval) S target?))
 
 
 
@@ -96,25 +101,31 @@
   (represent FAIL path-cost show-part-costs)
   (display "\n")
   
-  (display "DFS\n")
+  (display "Depth-First-Search\n")
   (represent DFS path-cost show-part-costs)
   (display "\n")
   
-  (display "BFS\n")
+  (display "Breadth-First-Search\n")
   (represent BFS path-cost show-part-costs)
   (display "\n")
   
-  (display "LCF\n")
+  (display "Least-Cost-First\n")
   (represent LCF path-cost show-part-costs)
   (display "\n")
   
-  (display "A*\n")
-  (represent A* path-cost show-part-costs)
+  (display "Cost-Bounded Depth-First B&B\n")
+  (represent CBDF path-cost show-part-costs)
   (display "\n")
 
-  (display "DFBB\n")
-  (represent DFBB path-cost show-part-costs)
+  (display "(cost+)Heuristic-Bounded Depth-First B&B\n")
+  (represent HBDF path-cost show-part-costs)
+  (display "\n")
+
+  (display "A*\n")
+  (represent A* path-cost show-part-costs)
   (display "\n"))
+
+
 
 
 

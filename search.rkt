@@ -102,21 +102,25 @@
   (lambda (p1 p2)
     (cond [(empty? p1) (not (empty? p2))]
           [(empty? p2) false]
-          [else (let ([i1 (node-id (first p1))]
-                      [i2 (node-id (first p2))])
+          [else 
+           (let ([i1 (last p1)]
+                 [i2 (last p2)])
                   (cond 
                     [(and (number? i1) (number? i2))
                      (or (< i1 i2)
                          (and (= i1 i2)
-                              ((tie::< list-data-rel) (rest p1) (rest p2))))]
+                              ((tie::< list-data-rel) (reverse (rest (reverse p1)))
+                                                      (reverse (rest (reverse p2))))))]
                     [(and (symbol? i1) (symbol? i2))
                      (or (symbol<? i1 i2)
                          (and (equal? i1 i2)
-                              ((tie::< list-data-rel) (rest p1) (rest p2))))]
+                              ((tie::< list-data-rel) (reverse (rest (reverse p1)))
+                                                      (reverse (rest (reverse p2))))))]
                     [(and (string? i1) (string? i2))
                      (or (string<? i1 i2)
                          (and (equal? i1 i2)
-                              ((tie::< list-data-rel) (rest p1) (rest p2))))]
+                              ((tie::< list-data-rel) (reverse (rest (reverse p1)))
+                                                      (reverse (rest (reverse p2))))))]
                     [(and (pair? i1) (pair? i2))
                      (or  ((tie::< list-data-rel) (list (car i1))
                                                   (list (car i2)))
@@ -147,22 +151,17 @@
 ;; Heuristic relation factory
 (define (h::< h tie/<)
   (lambda (p nxt)
-      (or (< (h p) (h nxt))
-          (and (= (h p) (h nxt))
+      (or (< (h (first p)) (h (first nxt)))
+          (and (= (h (first p)) (h (first nxt)))
                (tie/< p nxt)))))
 
 ;; A* relation factory
 (define (a*::< h cost/rec tie/<) 
   (lambda (p nxt)
     (local [(define (weight p) (+ (h (first p)) (cost/rec p)))]
-;              (cond [(empty? p) +inf.0]
-;                    [(empty? (rest p)) (h (first p))]
-;                    [else (+ (h (first p)) (cost/rec p))]))]
       (or (< (weight p) (weight nxt))
           (and (= (weight p) (weight nxt))
-               (tie/< p nxt))))))
-
-                                    
+               (tie/< p nxt))))))                                    
                                     
 ;; ==========================================================================
 ;; Iterative Bounded Search Factory
@@ -255,10 +254,10 @@
                           (cons
                            (if part-cost-flag
                                (cons (map (lambda (n) (node-id n)) p)
-                                     (cost/rec (reverse p)))
-                                     ;; For f-values instead:
-                                     ;(+ (node-data (last p))
-                                     ;   (cost/rec(reverse p))))
+                                     ;(cost/rec (reverse p)))
+                                     ; For f-values instead:
+                                     (+ (node-data (last p))
+                                        (cost/rec (reverse p))))
                                                                
                                (map (lambda (n) (node-id n)) p))
                            nxt))
