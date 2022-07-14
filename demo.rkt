@@ -2,7 +2,7 @@
 
 (require "search.rkt")
 
-(provide h tie<)
+(provide h)
 
 ;; ==========================================================================
 ;; Sample data:
@@ -44,13 +44,13 @@
 ;; Notes: Client can only (& must) specify case for nodes w/ lists as ids.
 ;; In other standard cases ties are broken by comparing primitives.
 ;; In non-standard and type-clash cases, defined fn always evals to false.
-(define tie< (tie::< (lambda (l1 l2) (< (length l1) (length l2)))))
+;(define tie< (tie::< (lambda (l1 l2) (< (length l1) (length l2)))))
 
 ;; DFS order: tie-prioritized stack
-(define dfs< (dfs::< tie<))
+(define dfs< (dfs::< ::tie<))
 
 ;; BFS order: tie-prioritized queue
-(define bfs< (bfs::< tie<))
+(define bfs< (bfs::< ::tie<))
 
 ;; Sums cost of edges over list of nodes (LON)
 ;; Notes: Cost function is provided by client.
@@ -61,20 +61,16 @@
 (define path-cost (cost::recur cost))
 
 ;; Least-cost-first: Cost-prioritized queue (w/ order finalized by tie-breaker)
-(define cost< (cost::< cost tie<))
+(define cost< (cost::< cost ::tie<))
 
 ;; Simple heuristic (w/ data-dependent admissability)
 
 (define h node-data)
 
-(define dfsh (lambda (p) (h (first p))))
-
 (define fval (lambda (p) (+ (h (first p)) (path-cost p))))
 
-(define h< (h::< h tie<))
-
 ;; A*: Queue prioritized by path-cost + heuristic weighting (tie-breaker final)
-(define a*< (a*::< h path-cost tie<))
+(define a*< (a*::< h path-cost ::tie<))
 
 ;; Demo search specs
 (define target? (lambda (nd) (equal? (node-id nd) 'Z)))
@@ -86,7 +82,10 @@
 (define LCF  ((search::terminal  cost<    pruner) S target?))
 (define A*   ((search::terminal  a*<      pruner) S target?))
 (define CBDF ((search::iterative dfs<  path-cost) S target?))
+(define CBBF ((search::iterative bfs<  path-cost) S target?))
 (define HBDF ((search::iterative dfs<       fval) S target?))
+(define HBBF ((search::iterative bfs<       fval) S target?))
+
 
 
 
@@ -94,7 +93,6 @@
 ;; Sample output:
 
 (define show-part-costs #f)
-
 (define (main)
 
   (display "FAIL\n")
@@ -117,8 +115,16 @@
   (represent CBDF path-cost show-part-costs)
   (display "\n")
 
+  (display "Cost-Bounded Breadth-First B&B\n")
+  (represent CBBF path-cost show-part-costs)
+  (display "\n")
+
   (display "(cost+)Heuristic-Bounded Depth-First B&B\n")
   (represent HBDF path-cost show-part-costs)
+  (display "\n")
+
+  (display "(cost+)Heuristic-Bounded Breadth-First B&B\n")
+  (represent HBBF path-cost show-part-costs)
   (display "\n")
 
   (display "A*\n")

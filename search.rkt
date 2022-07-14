@@ -7,6 +7,7 @@
 (provide prune-nothing prune-cycles prune-extension-joins prune-frontier-joins)
 (provide tie::< dfs::< bfs::< cost::< h::< a*::<)
 (provide cost::recur search::terminal search::iterative)
+(provide ::tie<)
 (provide represent)
 
 ;; ==========================================================================
@@ -100,34 +101,30 @@
 ;; Specifiable behaviour is for lists as ids
 (define (tie::< list-data-rel)
   (lambda (p1 p2)
-    (cond [(empty? p1) (not (empty? p2))]
-          [(empty? p2) false]
-          [else 
-           (let ([i1 (last p1)]
-                 [i2 (last p2)])
-                  (cond 
-                    [(and (number? i1) (number? i2))
-                     (or (< i1 i2)
-                         (and (= i1 i2)
-                              ((tie::< list-data-rel) (reverse (rest (reverse p1)))
-                                                      (reverse (rest (reverse p2))))))]
-                    [(and (symbol? i1) (symbol? i2))
-                     (or (symbol<? i1 i2)
-                         (and (equal? i1 i2)
-                              ((tie::< list-data-rel) (reverse (rest (reverse p1)))
-                                                      (reverse (rest (reverse p2))))))]
-                    [(and (string? i1) (string? i2))
-                     (or (string<? i1 i2)
-                         (and (equal? i1 i2)
-                              ((tie::< list-data-rel) (reverse (rest (reverse p1)))
-                                                      (reverse (rest (reverse p2))))))]
-                    [(and (pair? i1) (pair? i2))
-                     (or  ((tie::< list-data-rel) (list (car i1))
-                                                  (list (car i2)))
-                          ((tie::< list-data-rel) (list (cdr i1))
-                                                  (list (cdr i2))))]
-                    [(and (list? i1) (list? i2)) (list-data-rel i1 i2)]
-                    [else false]))])))
+    (local [(define (breaker l1 l2)
+              (let ([i1 (if (empty? l1) null (node-id (first l1)))]
+                    [i2 (if (empty? l2) null (node-id (first l2)))])
+                (cond [(null? i1) (not (null? i2))]
+                      [(null? i2) false]
+                      [(and (number? i1) (number? i2))
+                       (or (< i1 i2)
+                           (and (= i1 i2)
+                                (breaker (rest l1) (rest l2))))]
+                      [(and (symbol? i1) (symbol? i2))
+                       (or (symbol<? i1 i2)
+                           (and (equal? i1 i2)
+                                (breaker (rest l1) (rest l2))))]
+                      [(and (string? i1) (string? i2))
+                       (or (string<? i1 i2)
+                           (and (equal? i1 i2)
+                                (breaker (rest l1) (rest l2))))]
+                      [(and (list? i1) (list? i2)) (list-data-rel i1 i2)]
+                      [else false])))]
+      (cond 
+            [else (breaker (reverse p1) (reverse p2))]))))
+                  
+;; Provided (default) tie-breaking relation
+(define ::tie< (tie::< (lambda (l1 l2) (< (length l1) (length l2)))))
 
 ;; DFS relation factory
 (define (dfs::< tie/<)
@@ -254,10 +251,10 @@
                           (cons
                            (if part-cost-flag
                                (cons (map (lambda (n) (node-id n)) p)
-                                     ;(cost/rec (reverse p)))
+                                     (cost/rec (reverse p)))
                                      ; For f-values instead:
-                                     (+ (node-data (last p))
-                                        (cost/rec (reverse p))))
+                                     ;(+ (node-data (last p))
+                                     ;   (cost/rec (reverse p))))
                                                                
                                (map (lambda (n) (node-id n)) p))
                            nxt))
