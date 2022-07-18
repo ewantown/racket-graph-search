@@ -152,8 +152,8 @@
                        (or (string<? i1 i2)
                            (and (equal? i1 i2)
                                 (breaker (rest p1) (rest p2))))]
-                      [(and (list? i1) (list? i2))
-                       (breaker i1 i2)]
+                      [(and (list? i1) (list? i2)) (< (length i1)
+                                                      (length i2))]                     
                       [else false])))]
       (breaker (reverse d1) (reverse d2))))
 
