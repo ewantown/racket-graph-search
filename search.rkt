@@ -3,7 +3,7 @@
 (require "graph.rkt" "fluent.rkt")
 ;; ===========================================================================
 ;; Interface:
-(provide search:once search::bnb search::satset)
+(provide search:once search::bnb search::sat search::satset)
 
 ;; ==========================================================================
 ;; /First found/
@@ -156,76 +156,5 @@
                  empty
                  empty
                  empty))))
-
-;; ==========================================================================
-;; Scratch
-
-(define nand-constraint (lambda (x agg)
-                          (andmap (lambda (y) (not (and (cdr x) (cdr y))))
-                                  
-                                  agg)))
-
-(define nor-constraint (lambda (x agg)
-                          (andmap (lambda (y) (not (or (cdr x) (cdr y))))
-                                  
-                                  agg)))
-
-
-
-(define constraint-demo-first
-  (search::sat false ; toggle to see effect / levels of processing
-               symbol<?
-               nand-constraint
-               (lambda (x y) false)
-               (lambda (ext)
-                 (andmap (lambda (x)
-                           (nand-constraint x
-                                           (filter (lambda (y)
-                                                     (not (equal? x y)))
-                                                   ext)))
-                         ext))
-               (lambda (x y) false)))                                                
-
-(define constraint-demo-set
-  (search::satset false ; toggle to see effect / levels of processing
-                  symbol<?
-                  nand-constraint
-                  (lambda (x y) false)
-                  (lambda (ext)
-                    (andmap (lambda (x)
-                              (nand-constraint x
-                                               (filter (lambda (y)
-                                                         (not (equal? x y)))
-                                                       ext)))
-                            ext))
-                  (lambda (x y) false)))
-
-(define unifluent-first
-  (constraint-demo-first (list (fluent (list 'A 'B 'C)
-                                       (list #t #f)))))
-
-(define unifluent-set
-  (constraint-demo-set (list (fluent (list 'A 'B 'C)
-                                     (list #t #f)))))
-
-(define multifluent-first
-  (constraint-demo-first (list (fluent (list 'A) (list #t #f))
-                               (fluent (list 'B) (list #t #f))
-                               (fluent (list 'C) (list #t #f)))))
-                                                    
-(define multifluent-set
-  (constraint-demo-set (list (fluent (list 'A) (list #t #f))
-                             (fluent (list 'B) (list #t #f))
-                             (fluent (list 'C) (list #t #f)))))
-
-
-(display "unifluent-first:  ")
-(pretty-print unifluent-first)
-(display "multifluent-first:")
-(pretty-print multifluent-first)
-(display "unifluent-set:  ")
-(pretty-print unifluent-set)
-(display "multifluent-set:")
-(pretty-print multifluent-set)
 
 ;; ==========================================================================
