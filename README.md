@@ -1,2 +1,2 @@
-# racket-graph-search
+# search-factory
 Factory for parameterized graph-search procedures
