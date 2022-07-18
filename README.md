@@ -1,2 +1,2 @@
 # search-factory
-Factory for parameterized graph-search procedures
+Factory for parameterized search procedures
