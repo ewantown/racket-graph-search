@@ -19,7 +19,8 @@
 ;; ---------->: fluent -> node
 (define (fluent::->tree pigeonvars var< legal?)
   (lambda (f0)
-    (local [(define flu (fluent (sort (fluent-vars f0) var<) (fluent-vals f0)))
+    (local [(define flu 
+              (fluent (sort (fluent-vars f0) var<) (fluent-vals f0)))
             (define (recur-deep agg flu)
               (if (or (empty? (fluent-vars flu))
                       (empty? (fluent-vals flu)))
@@ -57,7 +58,7 @@
 ;; path<      : ((list node) (list node)) -> boolean
 ;; admit?     : (list (cons X Y)) -> boolean
 ;; ---------->: fluent -> (list (list (cons X Y)))
-(define (fluent::->models pigeonvars var< legal? path< admit?)
+(define (fluent::->models pigeonvars var< legal?)
   (lambda (f0)
     (local [(define root ((fluent::->tree pigeonvars var< legal?) f0))
             (define (goal? n)
@@ -69,13 +70,13 @@
                   (let ([path (first frnt)])
                     (if (goal? (first path))
                         (probe (rest frnt)
-                               (cons (node-data (first (first frnt))) acc))
+                               (cons (reverse (node-data (first (first frnt))))
+                                     acc))
                         (let ([reduct
                                (filter (lambda (alt)
-                                         (and (not (equal? alt path))
-                                              (admit? (node-data (first alt)))))
+                                         (not (equal? (first alt) (first path))))
                                        (append (map (lambda (n) (cons n path))
                                                     (node-arcs (first path)))
                                                  frnt))])
-                          (probe (sort reduct path<) acc))))))]
+                          (probe (sort reduct path<::dfs) acc))))))]
       (probe (list (list root)) empty))))

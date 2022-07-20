@@ -3,7 +3,7 @@
 (require "graph.rkt" "fluent.rkt")
 ;; ===========================================================================
 ;; Interface:
-(provide search:once search::bnb search::sat search::satset)
+(provide search::once search::bnb search::sat search::satset)
 
 ;; ==========================================================================
 ;; /First found/
@@ -12,7 +12,8 @@
 ;; path<  : (node node) -> boolean
 ;; prune  : (list (list node)) (list (list node)) -> (list (list node))
 ;; -----> : (list node)
-(define (search:once path< prune)
+
+(define (search::once path< prune)
   (lambda (start goal?)
     (local [(define (probe frnt acc)
               (if (empty? frnt)
@@ -20,14 +21,12 @@
                   (let ([path  (first frnt)])
                     (if (goal? (first path))
                         (reverse path) ; start->end
-                        (local [(define extens;ions of this path
-                                  (map (lambda (n) (cons n path)) 
-                                       (node-arcs (first path))))
-                                (define fringe (prune frnt extens))
-                                (define reduct;ion of the recurrence
-                                  (filter (lambda (p) (not (equal? p path)))
-                                          fringe))]
-
+                        (let ([reduct
+                               (filter (lambda (d)
+                                         (not (equal? (first d) (first path))))
+                                       (prune frnt
+                                              (map (lambda (n) (cons n path))
+                                                   (node-arcs (first path)))))])
                           (probe (sort reduct path<) (cons path acc)))))))]
       
       (probe (list (list start)) empty))))
@@ -37,9 +36,10 @@
 ;; path<     : ((list node) (list node)) -> boolean
 ;; solnweight: (list node) -> number
 ;; --------->: (node (node -> boolean)) -> (list node)
+
 (define (search::bnb path< weight)
   (lambda (start goal?)
-    (local [(define probe (search:once path< prune-cycles))
+    (local [(define probe (search::once path< prune-cycles))
             (define bench (probe start goal?))
             (define (optimize frnt rsf bnd)
               (if (empty? frnt)
@@ -51,9 +51,11 @@
                                             (rest frnt))
                                     (if (= nxtbnd bnd) rsf path)
                                     nxtbnd))
-                        (let ([reduct (filter (lambda (p)
-                                                (and (not (equal? p path))
-                                                     (< (weight p) bnd)))
+                        (let ([reduct
+                               (filter (lambda (d)
+                                         (and (not (equal? (first d)
+                                                           (first path)))
+                                              (< (weight d) bnd)))
                                        (append (map (lambda (n) (cons n path))
                                                     (node-arcs (first path)))
                                                frnt))])
@@ -71,21 +73,21 @@
 ;; admit?     : (list (cons X Y)) -> boolean
 ;; ---------->: (list fluent) -> (list (list (cons X Y)))
 
-(define (search::sat pigeonvars var< legal? path< admit? flu<)
+(define (search::sat pigeonvars var< legal? flu<)
   (lambda (loflu)
     (local [(define ->models
-              (fluent::->models pigeonvars var< legal? path< admit?))
+              (fluent::->models pigeonvars var< legal?))
+            (define cells
+              (map (lambda (f) (->models f)) (sort loflu flu<)))
             (define (unify ctx agg aggwl ctxwl)
               (if (empty? ctx)
-                  (reverse agg)
-                  (let ([admitted 
+                  agg
+                  (let ([admit
                          (filter (lambda (mdl)
-                                   (and (andmap (lambda (pair)
-                                                  (legal? pair agg))
-                                                mdl)
-                                        (admit? (append mdl agg))))
+                                   (andmap (lambda (pair) (legal? pair agg))
+                                           mdl))
                                  (first ctx))])
-                    (if (empty? admitted)
+                        (if (empty? admit)
                         (if (empty? ctxwl)
                            empty
                            (unify (first ctxwl)
@@ -93,17 +95,17 @@
                                   (rest  aggwl)
                                   (rest  ctxwl)))
                         (unify (rest ctx)
-                               (append (first admitted) agg)
+                               (append agg (first admit))
                                (append (map (lambda (mdl) (append mdl agg))
-                                            (rest admitted))
+                                            (rest admit))
                                        aggwl)
                                (append (map (lambda (i) (rest ctx))
-                                            (rest admitted))
+                                            (rest admit))
                                        ctxwl))))))]
-      (unify (map (lambda (f) (->models f)) (sort loflu flu<))
-             empty
-             empty
-             empty))))
+      (unify cells empty empty empty))))
+             
+             
+             
 
 ;; ==========================================================================
 ;; /All (such) Models/
@@ -114,47 +116,40 @@
 ;; admit?     : (list (cons X Y)) -> boolean
 ;; ---------->: (list fluent) -> (list (list (cons X Y)))
 
-(define (search::satset pigeonvars var< legal? path< admit? flu<)
+(define (search::satset pigeonvars var< legal? flu<)
   (lambda (loflu)
     (local [(define ->models
-              (fluent::->models pigeonvars var< legal? path< admit?))
-            (define (unify lolomdl agg aggwl ctxwl rsf)
-              (if (empty? lolomdl)
+              (fluent::->models pigeonvars var< legal?))
+            (define cells
+              (map (lambda (flu) (->models flu)) (sort loflu flu<)))
+            (define (unify ctx agg aggwl ctxwl rsf)
+              (if (empty? ctx)
                   (if (empty? aggwl)
-                      (reverse (cons (reverse agg) rsf))
-                      (unify (first ctxwl)
-                             (first aggwl)
-                             (rest  aggwl)
-                             (rest  ctxwl)
-                             (cons (reverse agg) rsf)))
-                  (let ([admitted 
+                      (reverse (cons agg rsf))
+                      (unify (first ctxwl) (first aggwl)
+                             (rest  aggwl) (rest  ctxwl)
+                             (cons agg rsf)))
+                  (let ([admit
                          (filter (lambda (mdl)
-                                   (and (andmap (lambda (pair)
-                                                  (legal? pair agg))
-                                                mdl)
-                                        (admit? (append mdl agg))))
-                                 (first lolomdl))])
-                    (if (empty? admitted)
+                                   (andmap (lambda (pair) (legal? pair agg))
+                                           mdl))
+                                 (first ctx))])
+                    (if (empty? admit)
                         (if (empty? ctxwl)
-                            empty
-                            (unify (first ctxwl)
-                                   (first aggwl)
-                                   (rest  aggwl)
-                                   (rest  ctxwl)
+                            (reverse rsf)
+                            (unify (first ctxwl) (first aggwl)
+                                   (rest  aggwl) (rest  ctxwl)
                                    rsf))
-                        (unify (rest lolomdl)
-                               (append (first admitted) agg)
-                               (append (map (lambda (mdl) (append mdl agg))
-                                            (rest admitted))
+                        (unify (rest ctx)
+                               (append agg (first admit))
+                               (append (map (lambda (mdl) (append agg mdl))
+                                            (rest admit))
                                        aggwl)
-                               (append (map (lambda (i) (rest lolomdl))
-                                            (rest admitted))
+                               (append (map (lambda (i) (rest ctx))
+                                            (rest admit))
                                        ctxwl)
                                rsf)))))]
-          (unify (map (lambda (f) (->models f)) (sort loflu flu<))
-                 empty
-                 empty
-                 empty
-                 empty))))
+      (unify cells empty empty empty empty))))
+
 
 ;; ==========================================================================
