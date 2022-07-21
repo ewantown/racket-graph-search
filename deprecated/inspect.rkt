@@ -23,10 +23,10 @@
                        (list (map (lambda (lon) (map (lambda (n) (node-id n)) lon))
                                   frnt)))))]
         [(equal? inspect::X inspect::sat)
-         (lambda (sol cutcnt) (list (cons 'Cut: cutcnt) sol))]
+         (lambda (sol cutcnt) (list (cons 'Cuts: cutcnt) sol))]
         [(or (equal? inspect::X inspect::fluent->models)
              (equal? inspect::X inspect::satset))
-         (lambda (sols cutcnt) (list (cons 'Cut: cutcnt) sols))]
+         (lambda (sols cutcnt) (list (cons 'Cuts: cutcnt) sols))]
         [else empty]))
 
 ;; ===========================================================================
@@ -63,7 +63,6 @@
   (lambda (start goal?)
     (local [(define probe (inspect::once path< prune-cycles))
             (define bench (probe start goal?))
-            (define init-rsf (second bench))     
             (define (optimize frnt rsf bnd acc)
               (if (empty? frnt)
                   ((format:: inspect::bnb)

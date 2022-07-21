@@ -87,13 +87,13 @@
                                    (andmap (lambda (pair) (legal? pair agg))
                                            mdl))
                                  (first ctx))])
-                        (if (empty? admit)
+                    (if (empty? admit)
                         (if (empty? ctxwl)
-                           empty
-                           (unify (first ctxwl)
-                                  (first aggwl)
-                                  (rest  aggwl)
-                                  (rest  ctxwl)))
+                            empty
+                            (unify (first ctxwl)
+                                   (first aggwl)
+                                   (rest  aggwl)
+                                   (rest  ctxwl)))
                         (unify (rest ctx)
                                (append agg (first admit))
                                (append (map (lambda (mdl) (append mdl agg))
@@ -103,9 +103,9 @@
                                             (rest admit))
                                        ctxwl))))))]
       (unify cells empty empty empty))))
-             
-             
-             
+
+
+
 
 ;; ==========================================================================
 ;; /All (such) Models/
@@ -117,38 +117,52 @@
 ;; ---------->: (list fluent) -> (list (list (cons X Y)))
 
 (define (search::satset pigeonvars var< legal? flu<)
-  (lambda (loflu)
-    (local [(define ->models
+  (lambda (loflu) ; returned procedure takes list of fluents as arg
+    (local [(define ->models ; see notes on fluent::->models 
               (fluent::->models pigeonvars var< legal?))
             (define cells
+              ; Each cell is list of all models "full" w.r.t. to corresp. fluent
+              ; A model, in turn, is a list of (var . val) pairs
               (map (lambda (flu) (->models flu)) (sort loflu flu<)))
+            ; Proc. to aggregate cells into list of admissible (full) models
+            ; ctx is list of cells, i.e. (listof (listof (listof pair)))
+            ; agg is list of pairs (a partial model)
+            ; aggwl is a list of lists of pairs (partial models to be extended)
+            ; ctxwl is a (listof (listof (listof (listof pair))))
+            ; - (first ctxwl) is aggregation context for (first aggwl)
+            ; rsf is a list of models, all "full" w.r.t. given list of fluents
             (define (unify ctx agg aggwl ctxwl rsf)
-              (if (empty? ctx)
-                  (if (empty? aggwl)
-                      (reverse (cons agg rsf))
-                      (unify (first ctxwl) (first aggwl)
+              (if (empty? ctx) ; If aggregation complete (agg is a full model)
+                  (if (empty? aggwl) ; If no more aggregates to extend...
+                      (reverse (cons agg rsf)) ; return the list of models.
+                      (unify (first ctxwl) (first aggwl) ; Else reduce worklist
                              (rest  aggwl) (rest  ctxwl)
                              (cons agg rsf)))
-                  (let ([admit
+                  (let ([admit ; Models in first of context consistent w/ agg
                          (filter (lambda (mdl)
                                    (andmap (lambda (pair) (legal? pair agg))
                                            mdl))
                                  (first ctx))])
-                    (if (empty? admit)
-                        (if (empty? ctxwl)
-                            (reverse rsf)
-                            (unify (first ctxwl) (first aggwl)
-                                   (rest  aggwl) (rest  ctxwl)
+                    (if (empty? admit) ; If no models consistent w/ this agg...
+                        (if (empty? ctxwl) ; If more aggregates to extend...
+                            (reverse rsf)  ; return the list of models,
+                            (unify (first ctxwl) (first aggwl) ; else reduce wl
+                                   (rest  aggwl) (rest  ctxwl) 
                                    rsf))
-                        (unify (rest ctx)
+                        (unify (rest ctx) ; Recursive call w/:
+                               ;First of admissible models appended to agg
                                (append agg (first admit))
+                               ;Rest of admissible models appended to worklist
                                (append (map (lambda (mdl) (append agg mdl))
                                             (rest admit))
                                        aggwl)
+                               ;Copies of current context appended to worklist
                                (append (map (lambda (i) (rest ctx))
                                             (rest admit))
                                        ctxwl)
+                               ;Nothing added to rsf
                                rsf)))))]
+      ; Initial call.
       (unify cells empty empty empty empty))))
 
 

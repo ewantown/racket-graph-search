@@ -122,9 +122,11 @@
 
 
 ;(random-seed 1) ; same sequence of randoms on each run
-;(define var< (lambda (v1 v2) (< (random) 0.5))) ; coin flip
+(define rand< (lambda (v1 v2) (< (random) 0.5))) ; coin flip
 ;(define var< (lambda (v1 v2) false)) ; for given order
 (define var< symbol<?)
+
+
 
 (define inspect-fluent (inspect::fluent->models false
                                                 var<
@@ -135,75 +137,121 @@
                                   legality
                                   (lambda (x y) false)))
 
+(define search-sat (search::sat false
+                                var<
+                                legality
+                                (lambda (x y) false)))
+
 (define inspect-satset (inspect::satset false
                                         var<
                                         legality
                                         (lambda (x y) false)))
 
-(define afluent (fluent (list 'E 'D 'H 'F 'C 'A 'G 'B)
+(define search-satset (search::satset false
+                                      var<
+                                      legality
+                                      (lambda (x y) false)))
+
+(define searcher (search::satset false var< legality (lambda (x y) false)))
+
+(define results (searcher (list (fluent (list 'E 'D 'H 'F 'C 'A 'G 'B)
+                                        (list 1 2 3 4)))))
+;(define afluent (fluent (list 'E 'D 'H 'F 'C 'A 'G 'B)
+;                        (list 1 2 3 4)))
+
+
+; Max cuts => lower in tree  => less efficient
+;(define afluent (fluent (list 'F 'H 'D 'G 'A 'B 'C 'E)
+;                        (list 1 2 3 4)))
+
+; Min cuts => higher in tree => more efficient
+(define afluent (fluent (list 'E 'D 'F 'C 'H 'G 'A 'B)
                         (list 1 2 3 4)))
 
-(define aflu-part1 (fluent (list 'E 'D 'H 'F)
-                           (list 1 2 3 4)))
-(define aflu-part2 (fluent (list 'C 'A 'G 'B)
-                           (list 1 2 3 4)))
-(define aflu-part3 (fluent empty empty))
+(define partitioned (list (fluent (list 'F 'H 'D 'G) (list 1 2 3 4))
+                          (fluent (list 'A 'B 'C 'E) (list 1 2 3 4))))
+
+(define (optimize trials)
+  ;(cdr (first rsf))
+  (local [(define searcher (inspect::satset false rand< legality rand<))
+          (define (rec rsf cnt)
+            (if (= 0 cnt)
+                rsf
+                (let ([res (searcher (list afluent))]);partitioned)])
+                  (rec (if (< (cdr (first res)) (cdr (first rsf)))
+                           res
+                           rsf)
+                       (sub1 cnt)))))]
+    (rec (searcher (list afluent)) trials)))
+
+;; Experiment results:
+;; (cut 4004): (F H D G) (A B C E)
+;; (cut 84):   E D F C H G A B -- after 100k runs.
 
 ;; ==========================================================================
 ;; Sample output:
 (define (main)
-  (display "FAIL\n")
-  (pretty-print FAIL)
-  (display "\n")
+  ;(display "FAIL\n")
+  ;(pretty-print FAIL)
+  ;(display "\n")
   
-  (display "Depth-First-Search\n")
-  (pretty-print DFS)
-  (display "\n")
+  ;(display "Depth-First-Search\n")
+  ;(pretty-print DFS)
+  ;(display "\n")
   
-  (display "Breadth-First-Search\n")
-  (pretty-print BFS)
-  (display "\n")
+  ;(display "Breadth-First-Search\n")
+  ;(pretty-print BFS)
+  ;(display "\n")
   
-  (display "Least-Cost-First\n")
-  (pretty-print LCF)
-  (display "\n")
+  ;(display "Least-Cost-First\n")
+  ;(pretty-print LCF)
+  ;(display "\n")
   
-  (display "Cost-Bounded Depth-First B&B\n")
-  (pretty-print CBDF)
-  (display "\n")
+  ;(display "Cost-Bounded Depth-First B&B\n")
+  ;(pretty-print CBDF)
+  ;(display "\n")
   
-  (display "Cost-Bounded Breadth-First B&B\n")
-  (pretty-print CBBF)
-  (display "\n")
+  ;(display "Cost-Bounded Breadth-First B&B\n")
+  ;(pretty-print CBBF)
+  ;(display "\n")
 
-  (display "A*\n")
-  (pretty-print A*)
-  (display "\n")
+  ;(display "A*\n")
+  ;(pretty-print A*)
+  ;(display "\n")
+   
+  ;(display "inspect::fluent->models")
+  ;(display "\n")
+  ;(pretty-print (time (inspect-fluent afluent)))
+  ;(display "\n")
 
-  (display "inspect::fluent->models")
-  (display "\n")
-  (pretty-print (time (inspect-fluent afluent)));(inspect-fluent afluent))
-  (display "\n")
+  ;(display "inspect::sat-unifluent")
+  ;(display "\n")
+  ;(pretty-print (time (inspect-sat (list afluent))))
+  ;(display "\n")
 
-  (display "inspect::sat-unifluent")
-  (display "\n")
-  (pretty-print (time (inspect-sat (list afluent))))
-  (display "\n")
+  ;(display "inspect::sat-multifluent")
+  ;(display "\n")
+  ;(pretty-print (time (inspect-sat partitioned)))
+  ;(display "\n")
 
-  (display "inspect::sat-multifluent")
-  (display "\n")
-  (pretty-print (time (inspect-sat (list aflu-part1 aflu-part2 aflu-part3))))
-  (display "\n")
+  ;(display "inspect::satset-unifluent")
+  ;(display "\n")
+  ;(time (search-satset (list afluent)))
+  ;(pretty-print (time (inspect-satset (list afluent))))
+  ;(display "\n")
 
-  (display "inspect::satset-unifluent")
-  (display "\n")
-  (pretty-print (time (inspect-satset (list afluent))))
-  (display "\n")
+  ;(display "inspect::satset-multifluent")
+  ;(display "\n")
+  ;(time (search-satset (list afluent)))
+  ;(pretty-print (time(inspect-satset (list afluent))))
+  ;(display "\n")
 
-  (display "inspect::satset-multifluent")
-  (display "\n")
-  (pretty-print (time (inspect-satset (list aflu-part1 aflu-part2 aflu-part3))))
-  (display "\n"))
+  (define solver (inspect::fluent->models false var< legality))
+  ;; A(2) B(1) C(5) D(5) E(4) F(6) G(5) H(6)
+  ;; Best: (list 'E 'D 'F 'C 'H 'G 'A 'B)
+  
+  (solver (fluent (list 'E 'D 'F 'C 'H 'G 'A 'B)
+                  (list 1 2 3 4)))
 
-
+  )
 

@@ -33,41 +33,28 @@
 
 ;; ===========================================================================
 ;; Tree generator:
+;; root-ctx  :  Y
 ;; root-data :  X
-;; terminal? :  X -> boolean
-;; nexts     : (X (list X)) -> (list X)
-;; legal?    : (X (list X)) -> boolean
+;; terminal? :  Y -> boolean
+;; nexts     : (X Y) -> (list X)
+;; reduce    :  Y -> Y
+;; legal?    : (X Y) -> boolean
 ;;---------->: node
-(define (::tree root-data terminal? nexts legal?)
-  (local [(define (recur-deep data ctx)
-            (if (terminal? data)
+(define (::tree root-ctx root-data terminal? reduce nexts legal?)
+  (local [(define (recur-deep ctx data)
+            (if (terminal? ctx)
                 (node `(,data) data empty)
                 (node `(,data)
                       data
-                      (recur-wide (nexts data ctx)
-                                  (cons data ctx)))))
-          (define (recur-wide lodata ctx)
+                      (recur-wide (reduce ctx)
+                                  (nexts data ctx)))))
+          (define (recur-wide ctx lodata)
               (cond [(empty? lodata) empty]
                     [(legal? (first lodata) ctx)
-                     (cons (recur-deep (first lodata) ctx)
-                           (recur-wide (rest  lodata) ctx))]
-                    [else (recur-wide (rest lodata) ctx)]))]
-    (recur-deep root-data empty)))
-
-;; A simple example:
-(define treefoo
-  (::tree (list 'p 'q 'r 's 't) ; root-data
-          (lambda (d) (= 10 (length d))) ; termination condition
-          (lambda (d ctx)                ; some generative rule
-            (map (lambda (x) (cons x d)) 
-                 (filter (lambda (y)
-                           (or (empty? ctx)
-                               (not (equal? y (first ctx)))))
-                         d)))
-          (lambda (d ctx) (or (empty? ctx) ; constraints
-                              (empty? (first (first ctx)))
-                              (not (equal? (first d)
-                                           (first (first ctx))))))))
+                     (cons (recur-deep ctx (first lodata))
+                           (recur-wide ctx (rest  lodata)))]
+                    [else  (recur-wide ctx (rest  lodata))]))]
+    (recur-deep root-ctx root-data)))
 
 ;; ===========================================================================
 ;; Factories:
