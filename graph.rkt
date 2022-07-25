@@ -35,22 +35,22 @@
 ;; Tree generator:
 ;; root-ctx  :  Y
 ;; root-data :  X
-;; terminal? :  Y -> boolean
+;; terminal? : (X Y) -> boolean
 ;; nexts     : (X Y) -> (list X)
 ;; reduce    :  Y -> Y
-;; legal?    : (X Y) -> boolean
+;; legal?    : (cons X Y) -> boolean
 ;;---------->: node
 (define (::tree root-ctx root-data terminal? reduce nexts legal?)
   (local [(define (recur-deep ctx data)
-            (if (terminal? ctx)
+            (if (terminal? data ctx)
                 (node `(,data) data empty)
                 (node `(,data)
                       data
-                      (recur-wide (reduce ctx)
-                                  (nexts data ctx)))))
+                      (recur-wide (reduce data ctx)
+                                  (nexts  data ctx)))))
           (define (recur-wide ctx lodata)
               (cond [(empty? lodata) empty]
-                    [(legal? (first lodata) ctx)
+                    [(legal? (cons (first lodata) ctx))
                      (cons (recur-deep ctx (first lodata))
                            (recur-wide ctx (rest  lodata)))]
                     [else  (recur-wide ctx (rest  lodata))]))]
@@ -58,11 +58,11 @@
 
 ;; ===========================================================================
 ;; Factories:
-
 ;; costfn : (cons node node) -> number
 ;; ------>: (list node) -> number
 (define (cost::sum costfn)
-  (lambda (d)
+  ;; d : (list node) w/ (first d) the last visited 
+  (λ (d)
     (local [(define (recsum p)
               (cond [(empty? p) -inf.0] ; cost of empty path
                      [(empty? (rest p)) 0] ; singleton is base
@@ -75,7 +75,7 @@
 ;; node-rel: (node node) -> boolean
 ;; ------->: ((list node) (list node)) -> boolean
 (define (path<::ith node-rel)
-  (lambda (d1 d2)
+  (λ (d1 d2)
     (local [(define (breaker p1 p2)
               (cond [(empty? p1) (not (empty? p2))]
                      [(empty? p2) false]
@@ -89,7 +89,7 @@
 ;; ----->: ((list node) (list node)) -> boolean
 (define (path<::cost costfn)
   (let ([pathcostfn (cost::sum costfn)]) 
-    (lambda (d nxt) (or (< (pathcostfn d) (pathcostfn nxt))
+    (λ (d nxt) (or (< (pathcostfn d) (pathcostfn nxt))
                         (and (= (pathcostfn d) (pathcostfn nxt))
                              (path<::tie d nxt))))))
 
@@ -97,7 +97,7 @@
 ;; h : node -> number
 ;; ----->: ((list node) (list node)) -> boolean
 (define (path<::h heur)
-  (lambda (d nxt)
+  (λ (d nxt)
       (or (< (heur (first d)) (heur (first nxt)))
           (and (= (heur (first d)) (heur (first nxt)))
                (path<::tie d nxt)))))
@@ -107,8 +107,8 @@
 ;; costfn : (cons node node) -> number
 ;; ----->: ((list node) (list node)) -> boolean
 (define (path<::a* h costfn) 
-  (lambda (d nxt)
-    (let ([weight (lambda (x) (+ (h (first x)) ((cost::sum costfn) x)))])
+  (λ (d nxt)
+    (let ([weight (λ (x) (+ (h (first x)) ((cost::sum costfn) x)))])
       (or (< (weight d) (weight nxt))
           (and (= (weight d) (weight nxt))
                (path<::tie d nxt))))))
@@ -145,36 +145,36 @@
       (breaker (reverse d1) (reverse d2))))
 
 ;; ((list node) (list node)) -> boolean
-(define path<::dfs (lambda (d nxt) (or (> (length d) (length nxt))     
+(define path<::dfs (λ (d nxt) (or (> (length d) (length nxt))     
                                    (and (= (length d) (length nxt))
                                         (path<::tie d nxt)))))
 
 ;; ((list node) (list node)) -> boolean
-(define path<::bfs (lambda (d nxt) (or (< (length d) (length nxt))     
+(define path<::bfs (λ (d nxt) (or (< (length d) (length nxt))     
                                    (and (= (length d) (length nxt))
                                         (path<::tie d nxt)))))
 
 ;; ((list node) (list node)) -> (list node)
-(define (prune-nothing frnt exts) (append exts frnt))
+(define (prune-nothing exts frnt) (append exts frnt))
 
 ;; ((list node) (list node)) -> (list node)
-(define (prune-cycles frnt exts)
-  (append (filter (lambda (d) (not (member (first d) (rest d)))) exts)
+(define (prune-cycles exts frnt)
+  (append (filter (λ (d) (not (member (first d) (rest d)))) exts)
           frnt))
 
 ;; ((list node) (list node)) -> (list node)
-(define (prune-frontier-joins  frnt exts)
+(define (prune-frontier-joins exts frnt)
   (append exts
-          (filter (lambda (fd)
-                    (andmap (lambda (ed)
+          (filter (λ (fd)
+                    (andmap (λ (ed)
                               (not (equal? (first ed) (first fd))))
                             exts))
                   frnt)))
 
 ;; ((list node) (list node)) -> (list node)
-(define (prune-extension-joins frnt exts)
-  (append (filter (lambda (ed)
-                    (andmap (lambda (fd)
+(define (prune-extension-joins exts frnt)
+  (append (filter (λ (ed)
+                    (andmap (λ (fd)
                               (not (equal? (first fd) (first ed))))
                             frnt))
                   exts)
