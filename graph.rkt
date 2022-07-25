@@ -37,7 +37,7 @@
 ;; root-data :  X
 ;; terminal? : (X Y) -> boolean
 ;; nexts     : (X Y) -> (list X)
-;; reduce    :  Y -> Y
+;; reduce    : (X Y) -> Y
 ;; legal?    : (cons X Y) -> boolean
 ;;---------->: node
 (define (::tree root-ctx root-data terminal? reduce nexts legal?)

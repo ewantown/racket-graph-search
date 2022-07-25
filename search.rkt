@@ -8,7 +8,11 @@
          search::bnb
          search::models
          search::sat
-         search::satset)
+         search::satset
+         search::sls
+         search::anneal
+         search::beam)
+
 
 ;; ==========================================================================
 ;; /First solution path found/
